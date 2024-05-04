@@ -67,12 +67,13 @@ class DataMod_FC(L.LightningDataModule):
             x = hf["Set1/GImp"][:]
             y = hf["Set1/SImp"][:]
             ndens = hf["Set1/dens"][:]
+            beta = hf['Set1/Parameters'][:][:,-1]
         x = np.concatenate((x.real, x.imag), axis=1)
         y = np.concatenate((y.real, y.imag), axis=1)
         p = np.random.RandomState(seed=0).permutation(x.shape[0])
         x = x[p,:]
         y = y[p,:]
-        #x = np.c_[ndens, x]
+        x = np.c_[ndens, beta, x]
         x = torch.tensor(x, dtype=self.dtype)
         y = torch.tensor(y, dtype=self.dtype)
 

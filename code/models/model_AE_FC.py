@@ -157,18 +157,18 @@ class AE_FC_01(L.LightningModule):
         SE = self.fc_net(G)
         return SE
     
-    def forward(self, G):
+    def forward(self, G, ndens):
         G_latent = self.G_encoder(G)
-        SE_latent = self.G_to_SE(G_latent)
+        SE_latent = self.G_to_SE(torch.cat((G_latent,ndens), dim=1))
         SE = self.SE_decoder(SE_latent)
         return G_latent, SE_latent, SE
 
 
 
     def training_step(self, train_batch, batch_idx):
-        G_in, SE_in = train_batch
-        #ndens, G_in = torch.split(G_in_n, [1, G_in_n.size(1)], dim=0)
-        G_latent, SE_latent, SE_hat = self(G_in)
+        x, SE_in = train_batch
+        ndens, beta, G_in = torch.split(x, [1, x.size(1)], dim=0)
+        G_latent, SE_latent, SE_hat = self(G_in, ndens)
         G_hat = self.G_decoder(G_latent)
         #TODO: think about thrid loss: train SE encoder/decoder on data as well
         G_reconstr = self.reconstr_loss_f(G_in, G_hat)

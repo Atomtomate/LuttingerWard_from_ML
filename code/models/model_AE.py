@@ -4,6 +4,7 @@ import pytorch_lightning as L
 
 from utils.LossFunctions import *
 from utils.misc import *
+#TODO: this needs a rewrite, the config param in the cosntructor makes loading from checkpoints really dumb
 
 def AE_config_to_hparams(config: dict) -> dict:
     """
@@ -28,13 +29,13 @@ def AE_config_to_hparams(config: dict) -> dict:
 
 # ================ Implementation =================
 class AutoEncoder_01(L.LightningModule):
+
+
     def __init__(self, config):
         super(AutoEncoder_01, self).__init__()
-        
         hparams = AE_config_to_hparams(config)
         for key in hparams.keys():
             self.hparams[key]=hparams[key]
-
         self.dropout_in = nn.Dropout(self.hparams['dropout_in']) if self.hparams['dropout_in'] > 0 else nn.Identity()
         self.dropout = nn.Dropout(self.hparams['dropout']) if self.hparams['dropout'] > 0  else nn.Identity()
         self.activation = activation_str_to_layer(self.hparams['activation'])
@@ -82,8 +83,8 @@ class AutoEncoder_01(L.LightningModule):
             if isinstance(layer, nn.Linear):
                 nn.init.kaiming_normal_(layer.weight, mode="fan_in", nonlinearity="relu")
                 nn.init.zeros_(layer.bias)
-
-        self.save_hyperparameters(self.hparams)
+        self.save_hyperparameters()
+        
 
     def forward(self, x):
         x = self.encoder(x)
