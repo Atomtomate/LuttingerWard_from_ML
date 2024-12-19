@@ -1,10 +1,8 @@
 {
     
-        "MODEL_NAME": "AE_FC_scale_01",
+        "MODEL_NAME": "FC_scale_01",
         "MODEL_WRAPER": "model_wraper_ae",
         "PATH_TRAIN": "D:/data_batch2_nPrune.hdf5",
-        "GF_AE_path": "G:/Codes/LuttingerWard_from_ML/.neptune/auto_encoder/LWAEP-121/checkpoints/last.ckpt",
-        "SE_AE_path": "G:/Codes/LuttingerWard_from_ML/.neptune/auto_encoder/LWAEP-139/checkpoints/last.ckpt",
         "dtype": "float64",
         "seed": 12345,
 
@@ -27,12 +25,11 @@
         "with_batchnorm": false,
         "loss": "MSE",
 
-        "in_dim": 200,
+        "in_dim": 202,
         "out_dim": 200,
-        "latent_dim": 14,
-        "AE_layers": 2,
-        "latent_layers": 6,
-        "FC_dim": 14,
+        "latent_dim": 200,
+        "AE_layers": 1,
+        "FC_layers": 6,
 
         "device_type": "gpu",
         "devices": 1,

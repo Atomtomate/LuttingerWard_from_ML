@@ -5,8 +5,8 @@ import numpy as np
 from utils.LossFunctions import *
 from utils.misc import *
 import matplotlib.pyplot as plt
-from model_AE import AutoEncoder_01
-import json
+
+#TODO: abstract encoding/docing/G_to_Sigma parts away. Define this model to consist of 3 models.
 
 def FC_config_to_hparams(config: dict) -> dict:
     """
@@ -20,17 +20,12 @@ def FC_config_to_hparams(config: dict) -> dict:
     hparams['dropout'] = config['dropout']
     hparams['activation'] = config['activation']
     hparams['in_dim'] = config['in_dim']
-    hparams['latent_dim'] = config['latent_dim']
-    hparams['FC_dim'] = config['FC_dim']
-    hparams['AE_layers'] = config['AE_layers']
-    hparams['latent_layers'] = config['FC_layers']
+    hparams['latent_layers'] = config['latent_layers'] if 'FC_layers' in config.keys()  else config['FC_layers']
     hparams['with_batchnorm'] = config['with_batchnorm']
     hparams['optimizer'] = config['optimizer']
     hparams['loss'] = config['loss']
     hparams['weight_decay'] = config['weight_decay']
     hparams['out_dim'] = config['out_dim']
-    hparams['GF_AE_path']  = config['GF_AE_path']
-    hparams['SE_AE_path']  = config['SE_AE_path']
     return hparams
 
 
@@ -46,12 +41,11 @@ def linear_block(in_dim, out_dim, activation,
     return res
 
 
-
-class AE_FC_02(L.LightningModule):
-    """Fully conencted network with pretrained autoencoders."""
-    def __init__(self, config: dict, dbg_print = False) -> None:
+class FC_01(L.LightningModule):
+    """Feed Forward network."""
+    def __init__(self, config: dict) -> None:
         super().__init__()
-        self.config = config
+
         hparams = FC_config_to_hparams(config)
         for key in hparams.keys():
             self.hparams[key]=hparams[key]
@@ -61,33 +55,19 @@ class AE_FC_02(L.LightningModule):
         self.activation = activation_str_to_layer(self.hparams['activation'])
         self.reconstr_loss_f = loss_str_to_layer(self.hparams['loss'])
         self.lr = self.hparams['lr']
-        if dbg_print:
-            print("G:")
-        tmp_cfg = json.load(open("G:/Codes/LuttingerWard_from_ML/configs/confmod_AE_GE_tmp.json"))
-        self.GF_encoder = AutoEncoder_01.load_from_checkpoint(self.hparams['GF_AE_path'], config=tmp_cfg)
-        self.GF_encoder.eval()
-        self.GF_encoder.freeze()
-        if dbg_print:
-            print("SE:")
-        tmp_cfg = json.load(open("G:/Codes/LuttingerWard_from_ML/configs/confmod_AE_SE_tmp.json"))
-        self.SE_encoder = AutoEncoder_01.load_from_checkpoint(self.hparams['SE_AE_path'], config=tmp_cfg)
-        self.SE_encoder.eval()
-        self.SE_encoder.freeze()
 
-        if dbg_print:
-            print("FC:")
+        self.plot_worst_examples = False
+        self.worst_losses_ids = np.zeros(2,dtype=int)    # track the worst 3 example indices
+        self.worst_losses_data  = [None, None]           # track the worst 3 example losses
+        self.test_step_outputs = []
+
         bl_fc_net = []
         for i in range(self.hparams['latent_layers']):
-            #TODO: half of the first/last layer logic is here, half in linear_block...
-            # +1 use density in latent dim, 
-            current_dim = self.hparams['latent_dim'] + 1 if (i == 0) else self.hparams['FC_dim']
-            next_dim = self.hparams['latent_dim'] if (i == self.hparams['latent_layers'] - 1) else self.hparams['FC_dim']
-            bl_fc_net.extend(linear_block(current_dim, next_dim, 
+            
+            bl_fc_net.extend(linear_block(self.hparams['in_dim'], self.hparams['out_dim'] if (i == self.hparams['latent_layers'] - 1) else self.hparams['in_dim'],  
                                         self.activation, nn.Identity(), self.dropout, self.hparams['with_batchnorm'],
-                                        last_layer = (i == self.hparams['latent_layers'] - 1)
+                                        last_layer = (i == self.hparams['latent_layers'] - 1), first_layer = False
                                         ))
-            if dbg_print:
-                print(f"FC[{i}]: " + str(current_dim) + " -> " + str(next_dim))
         self.fc_net     = nn.Sequential(*bl_fc_net) if self.hparams['latent_layers'] > 0 else nn.Sequential(nn.Identity())
 
         for layer in self.fc_net:
@@ -96,39 +76,71 @@ class AE_FC_02(L.LightningModule):
                 nn.init.zeros_(layer.bias)
         self.save_hyperparameters(self.hparams)
     
-    def GF_to_SE(self, GF):
-        SE = self.fc_net(GF)
+    def G_to_SE(self, G):
+        SE = self.fc_net(G)
         return SE
     
-    def forward(self, GF, ndens):
-        G_latent = self.GF_encoder.encoder(GF)
-        SE_latent = self.GF_to_SE(torch.cat((G_latent,ndens), dim=1))
-        SE = self.SE_encoder.decoder(SE_latent)
+    def forward(self, x):
+        SE = self.G_to_SE(x)
         return SE
 
-    def _shared_eval_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        x, SE_in = batch
-        ndens, beta, GF_in = torch.split(x, [1,1,x.size(1)-2], dim=1) 
-        SE_hat = self(GF_in, ndens)
-        loss = self.reconstr_loss_f(SE_in, SE_hat)
-        return loss
 
-    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        loss = self._shared_eval_step(batch , batch_idx)
+
+    def training_step(self, batch, batch_idx):
+        x, SE_in = batch
+        SE_hat = self(x)
+        SE_reconstr = self.reconstr_loss_f(SE_in, SE_hat)
+
+        loss =  SE_reconstr
         self.log("train/loss", loss, prog_bar=False)
         return loss
 
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        loss = self._shared_eval_step(batch , batch_idx)
+        x, SE_in = batch
+        SE_hat = self(x)
+        SE_reconstr = self.reconstr_loss_f(SE_in, SE_hat)
+        loss =  SE_reconstr
         self.log("val/loss", loss, prog_bar=True)
         return loss
-    
+
     def test_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        loss = self._shared_eval_step(batch , batch_idx)
-        self.log("test/loss", loss, prog_bar=True)
+        x, SE_in = batch
+        SE_hat = self(x)
+        SE_reconstr = self.reconstr_loss_f(SE_in, SE_hat)
+        loss =  SE_reconstr
+        self.log("test/loss", loss, on_epoch=True)
+        self.test_step_outputs.append(loss) 
         return loss
     
+    def on_validation_epoch_start(self):
+        # reset worst examples
+        self.worst_losses_data = [None, None]
+        self.worst_losses    = np.zeros(2)
+
+    def on_validation_epoch_end(self):
+        # plot worst 2 
+        if False:
+            for ii,batch_i in enumerate(self.worst_losses_data):
+                if batch_i is not None:
+                    G_in, S_hat, S_in = batch_i
+                    batch_len = S_in.size(0)
+                    fig, axs = plt.subplots(batch_len,3, figsize=(24,12))
+                    for i in range(batch_len):
+                        axs[i,0].plot(G_in[i,:].cpu(), linewidth=2)
+                        axs[i,1].plot(S_in[i,:].cpu(), label="ground truth", linewidth=2)
+                        axs[i,1].plot(S_hat[i,:].cpu(), label="prediction", linewidth=2)
+                        axs[i,0].set_title(f"Batch {ii}")
+                        axs[i,1].legend()
+                        axs[i,2].plot(np.abs(S_hat[i,:].cpu() - S_in[i,:].cpu()), label="Log Diff")
+                        axs[i,0].set_xlabel("nu")
+                        axs[i,0].set_ylabel("G_in")
+                        axs[i,1].set_xlabel("nu")
+                        axs[i,1].set_ylabel("Sigma_in")
+                        axs[i,2].set_xlabel("nu")
+                        axs[i,2].set_ylabel("Delta Sigma")
+                        axs[i,2].set_yscale('log')
+                    self.logger.experiment[f"val/worst_examples_{ii}"].append(fig)
 
     def configure_optimizers(self):
         if self.hparams["optimizer"] == "SGD":

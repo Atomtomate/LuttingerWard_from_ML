@@ -4,7 +4,7 @@ from os.path import dirname, abspath, join
 
 #TODO I hate the python import system. someone else fix this please.
 sys.path.append(join(dirname(__file__),'../code/models'))
-from model_AE_FC import AE_FC_01
+from model_AE_FC_transfer import AE_FC_02
 sys.path.append(join(dirname(__file__),'../code/models/IO'))
 from DataMod_FC import *
 
@@ -18,13 +18,14 @@ from argparse import ArgumentParser
 
 import json
 
-torch.set_float32_matmul_precision("medium")
+torch.set_float32_matmul_precision("highest")
+torch.set_default_dtype(torch.float64)
 
 
 if __name__ == '__main__':
-    config = json.load(open(join(dirname(__file__),'../configs/confmod_AE_FC_test.json')))
+    config = json.load(open(join(dirname(__file__),'../configs/confmod_AE_FC_transfer.json')))
     torch.manual_seed(config['seed'])
-    model = AE_FC_01(config) 
+    model = AE_FC_02(config) 
     dataMod = DataMod_FC(config)
     neptune_logger = NeptuneLogger(
                     project="stobbe.julian/LW-AEpFC",
@@ -38,5 +39,5 @@ if __name__ == '__main__':
     accumulator = GradientAccumulationScheduler(scheduling={0: 128, 12: 64, 16: 32, 24: 16, 32: 8, 40: 4, 48: 1})
     callbacks = [lr_monitor, accumulator]
     trainer = L.Trainer(enable_checkpointing=False, max_epochs=config["epochs"],
-                    callbacks=callbacks, logger=neptune_logger) #[TB_logger, neptune_logger]
+                    callbacks=callbacks) #[TB_logger, neptune_logger]
     trainer.fit(model, datamodule=dataMod)

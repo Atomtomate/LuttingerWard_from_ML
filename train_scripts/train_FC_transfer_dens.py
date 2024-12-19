@@ -18,20 +18,20 @@ from argparse import ArgumentParser
 import neptune
 import json
 
-torch.set_float32_matmul_precision("highest")
+torch.set_float32_matmul_precision("high")
 torch.set_default_dtype(torch.float64)
 
 def main(args):
     pr = neptune.init_project("LW-AEpFC")
     models_table = pr.fetch_models_table().to_pandas()
     i = 0
-    config_path = join(dirname(__file__),'../configs/confmod_AE_FC_transfer.json')
+    config_path = join(dirname(__file__),'../configs/confmod_AE_FC_transfer_with_dens.json')
     config = json.load(open(config_path))
-    model_key = "AEFC"
+    model_key = "AEFCN"
     if not any(models_table["sys/id"].str.contains("LWAEP-"+model_key)):
         modelN = neptune.init_model(key=model_key,name=config['MODEL_NAME'],project="stobbe.julian/LW-AEpFC")
     for FC_layers in [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]:
-        if i > -1:
+        if i > 3:
             config['FC_layers'] = FC_layers
             model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FC{FC_layers}",project="stobbe.julian/LW-AEpFC")
             torch.manual_seed(config['seed'])
