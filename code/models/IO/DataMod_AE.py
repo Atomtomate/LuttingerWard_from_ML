@@ -62,21 +62,46 @@ class DataMod_AE(L.LightningDataModule):
         """
         Download and transform datasets. 
         """
-        with h5py.File(self.data, "r") as hf:
-            if self.mode == 'gf':
-                x = hf["Set1/GImp"][:]
-            elif self.mode == 'se':
-                x = hf["Set1/SImp"][:]
-            else:
-                raise RuntimeError("mode " + self.mode + "not found")
-            #y = hf["Set1/GImp"][:]
-        x = np.concatenate((x.real, x.imag), axis=1)
-        y = copy.deepcopy(x)
-        p = np.random.RandomState(seed=0).permutation(x.shape[0])
-        x = x[p,:]
-        y = y[p,:]
-        x = torch.tensor(x, dtype=self.dtype)
-        y = torch.tensor(y, dtype=self.dtype)
+        if isinstance(self.data, list):
+            x = None
+            y = None
+            for file in self.data:
+                with h5py.File(file, "r") as hf:
+                    if self.mode == 'gf':
+                        xi = hf["Set1/GImp"][:]
+                    elif self.mode == 'se':
+                        xi = hf["Set1/SImp"][:]
+                    else:
+                        raise RuntimeError("mode " + self.mode + "not found")
+                xi = np.concatenate((xi.real, xi.imag), axis=1)
+                yi = copy.deepcopy(xi)
+                p = np.random.RandomState(seed=0).permutation(xi.shape[0])
+                xi = xi[p,:]
+                yi = yi[p,:]
+                if x is None:
+                    x = xi
+                    y = yi
+                else:
+                    x = np.concatenate((x, xi), axis=0)
+                    y = np.concatenate((y, yi), axis=0)
+            x = torch.tensor(x, dtype=self.dtype)
+            y = torch.tensor(y, dtype=self.dtype)
+        else:
+            with h5py.File(self.data, "r") as hf:
+                if self.mode == 'gf':
+                    x = hf["Set1/GImp"][:]
+                elif self.mode == 'se':
+                    x = hf["Set1/SImp"][:]
+                else:
+                    raise RuntimeError("mode " + self.mode + "not found")
+                #y = hf["Set1/GImp"][:]
+            x = np.concatenate((x.real, x.imag), axis=1)
+            y = copy.deepcopy(x)
+            p = np.random.RandomState(seed=0).permutation(x.shape[0])
+            x = x[p,:]
+            y = y[p,:]
+            x = torch.tensor(x, dtype=self.dtype)
+            y = torch.tensor(y, dtype=self.dtype)
 
         self.train_dataset = AE_Dataset(x, y, self.dtype)
         self.train_set_size = int(len(self.train_dataset) * 0.8)

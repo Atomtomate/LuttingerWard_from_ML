@@ -37,7 +37,7 @@ def main(args):
                 config['FC_dim'] = FC_dim
                 model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FCD{FC_dim}FCL{FC_layers}",project="stobbe.julian/LW-AEpFC")
                 torch.manual_seed(config['seed'])
-                model = AE_FC_02.load_from_checkpoint(checkpoint_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-274/checkpoints/last.ckpt",config=config)
+                model = AE_FC_02.load_from_checkpoint(checkpoint_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-275/checkpoints/last.ckpt",config=config)
                 dataMod = DataMod_FC(config)
                 model_version["model/signature"].upload(config_path)
                 model_script = model.to_torchscript()
@@ -69,7 +69,7 @@ def main(args):
                                 callbacks=callbacks, logger=neptune_logger, gradient_clip_val=0.5) #precision="16-mixed", 
                 #['cudagraphs', 'inductor', 'onnxrt', 'openxla', 'tvm']
                 torch.compile(model, fullgraph=True, mode="max-autotune", backend='cudagraphs')
-                trainer.fit(model, datamodule=dataMod, ckpt_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-274/checkpoints/last.ckpt",)
+                trainer.fit(model, datamodule=dataMod, ckpt_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-275/checkpoints/last.ckpt",)
                 model_version["run/id"] = neptune_logger._run_instance["sys/id"].fetch()
                 neptune_logger.log_model_summary(model=model, max_depth=-1)
                 neptune_logger._run_instance.stop()

@@ -2,20 +2,19 @@
     
         "MODEL_NAME": "auto_encoder",
         "MODEL_WRAPER": "model_wraper_ae",
-        "PATH_TRAIN": ["D:/data_batch1_nPrune.hdf5","D:/data_batch1_nPrune.hdf5"],
+        "PATH_TRAIN": [],
         "DATA_LOADER": "Dataset_ae_split",
         "dtype": "float64",
         "seed": 12345,
 
-        "mode": "se",
+        "mode": "gf",
 
         "optimizer": "Adam",
         "batch_size": 64,
         "val_batch_size": 512,
         "learning_rate": 1e-3,
         "weight_decay": 0.0,
-        "epochs": 300,
-
+        "epochs": 350,
 
         "SGD_momentum": 0.9,
         "SGD_dampening": 0.0,

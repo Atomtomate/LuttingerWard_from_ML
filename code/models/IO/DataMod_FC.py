@@ -85,37 +85,86 @@ class DataMod_FC(L.LightningDataModule):
         """
         Download and transform datasets. 
         """
-        if not self.mmap_x:
-            if self.preprocessed_data:
-                with h5py.File(self.data, "r") as hf:
-                    x = torch.tensor(hf["data"][:], dtype=self.dtype)
-                    y = torch.tensor(hf["labels"][:], dtype=self.dtype)
-            else:
-                with h5py.File(self.data, "r") as hf:
-                    x = hf["Set1/GImp"][:]
-                    y = hf["Set1/SImp"][:]
-                    ndens = hf["Set1/dens"][:]
-                    beta = hf['Set1/Parameters'][:][:,-1]
-                x = np.concatenate((x.real, x.imag), axis=1)
-                y = np.concatenate((y.real, y.imag), axis=1)
-                p = np.random.RandomState(seed=0).permutation(x.shape[0])
-                x = x[p,:]
-                y = y[p,:]
-                x = np.c_[ndens, beta, x]
-                x = torch.tensor(x, dtype=self.dtype)
-                y = torch.tensor(y, dtype=self.dtype)
+        if isinstance(self.data, list):
+            x = None
+            y = None
+            for file in self.data:
+                x = None
+                y = None
+                if self.preprocessed_data:
+                    with h5py.File(file, "r") as hf:
+                        xi = hf["data"][:]
+                        yi = hf["labels"][:]
+                        p = np.random.RandomState(seed=0).permutation(xi.shape[0])
+                        xi = xi[p,:]
+                        yi = yi[p,:]
+                        if x is None:
+                            x = xi
+                            y = yi
+                        else:
+                            x = np.concatenate((x, xi), axis=0)
+                            y = np.concatenate((y, yi), axis=0)
+                    x = torch.tensor(x, dtype=self.dtype)
+                    y = torch.tensor(y, dtype=self.dtype)
+                else:
+                    with h5py.File(file, "r") as hf:
+                        xi = hf["Set1/GImp"][:]
+                        yi = hf["Set1/SImp"][:]
+                        ndens = hf["Set1/dens"][:]
+                        beta = hf['Set1/Parameters'][:][:,-1]
+                    xi = np.concatenate((xi.real, xi.imag), axis=1)
+                    yi = np.concatenate((yi.real, yi.imag), axis=1)
+                    p = np.random.RandomState(seed=0).permutation(xi.shape[0])
+                    xi = xi[p,:]
+                    yi = yi[p,:]
+                    xi = np.c_[ndens, beta, xi]
+                    if x is None:
+                        x = xi
+                        y = yi
+                    else:
+                        x = np.concatenate((x, xi), axis=0)
+                        y = np.concatenate((y, yi), axis=0)
+            x = torch.tensor(x, dtype=self.dtype)
+            y = torch.tensor(y, dtype=self.dtype)
 
-        if not self.mmap_x:
             ds = FC_Dataset(x, y, self.dtype)
             len_t = len(ds)
-            if stage != 'test':
-                self.train_set_size = int(len_t * self.train_val_split)
-                self.val_set_size = len_t - self.train_set_size
-                self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size])
-            else:
-                self.test_dataset = ds
+            self.train_set_size = int(len_t * self.train_val_split)
+            self.val_set_size = len_t - self.train_set_size
+            self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size])
+
         else:
-            self.test_dataset = FC_File_Dataset(self.mmap_x, self.mmap_y, self.mmap_x_size, self.mmap_y_size, self.dtype)
+            if not self.mmap_x:
+                if self.preprocessed_data:
+                    with h5py.File(self.data, "r") as hf:
+                        x = torch.tensor(hf["data"][:], dtype=self.dtype)
+                        y = torch.tensor(hf["labels"][:], dtype=self.dtype)
+                else:
+                    with h5py.File(self.data, "r") as hf:
+                        x = hf["Set1/GImp"][:]
+                        y = hf["Set1/SImp"][:]
+                        ndens = hf["Set1/dens"][:]
+                        beta = hf['Set1/Parameters'][:][:,-1]
+                    x = np.concatenate((x.real, x.imag), axis=1)
+                    y = np.concatenate((y.real, y.imag), axis=1)
+                    p = np.random.RandomState(seed=0).permutation(x.shape[0])
+                    x = x[p,:]
+                    y = y[p,:]
+                    x = np.c_[ndens, beta, x]
+                    x = torch.tensor(x, dtype=self.dtype)
+                    y = torch.tensor(y, dtype=self.dtype)
+
+            if not self.mmap_x:
+                ds = FC_Dataset(x, y, self.dtype)
+                len_t = len(ds)
+                if stage != 'test':
+                    self.train_set_size = int(len_t * self.train_val_split)
+                    self.val_set_size = len_t - self.train_set_size
+                    self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size])
+                else:
+                    self.test_dataset = ds
+            else:
+                self.test_dataset = FC_File_Dataset(self.mmap_x, self.mmap_y, self.mmap_x_size, self.mmap_y_size, self.dtype)
         
 
     def train_dataloader(self):
