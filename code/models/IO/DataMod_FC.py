@@ -168,10 +168,10 @@ class DataMod_FC(L.LightningDataModule):
         
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.train_batch_size, num_workers=self.num_workers, persistent_workers=self.persistent_workers, shuffle=True)
+        return DataLoader(self.train_dataset, batch_size=self.train_batch_size, num_workers=self.num_workers, pin_memory=True, persistent_workers=self.persistent_workers, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, num_workers=self.num_workers, persistent_workers=self.persistent_workers, shuffle=False)
+        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, num_workers=self.num_workers, pin_memory=True, persistent_workers=self.persistent_workers, shuffle=False)
     
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.val_batch_size, num_workers=self.num_workers, persistent_workers=self.persistent_workers, shuffle=False)

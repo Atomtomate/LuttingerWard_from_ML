@@ -111,10 +111,10 @@ class DataMod_AE(L.LightningDataModule):
         
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.train_batch_size, num_workers=8, persistent_workers=True, shuffle=True)
+        return DataLoader(self.train_dataset, batch_size=self.train_batch_size, num_workers=8, pin_memory=True, persistent_workers=True, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.train_batch_size, num_workers=8, persistent_workers=True, shuffle=False)
+        return DataLoader(self.val_dataset, batch_size=self.train_batch_size, num_workers=8, pin_memory=True, persistent_workers=True, shuffle=False)
     
     def test_dataloader(self):
         raise NotImplementedError("Define standard for data generation from jED.jl and create test data there!")

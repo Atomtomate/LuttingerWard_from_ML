@@ -20,6 +20,8 @@ import json
 
 torch.set_float32_matmul_precision("high")
 torch.set_default_dtype(torch.float64)
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 def main(args):
     pr = neptune.init_project("LW-AEpFC")
@@ -30,14 +32,14 @@ def main(args):
     model_key = "AEFCNL"
     if not any(models_table["sys/id"].str.contains("LWAEP-"+model_key)):
         modelN = neptune.init_model(key=model_key,name=config['MODEL_NAME'],project="stobbe.julian/LW-AEpFC")
-    for FC_layers in [6,7,8,9,10]:
-        for FC_dim in [20,40,50,60,70,80,90,100]:
-            if (FC_layers == 10 and FC_dim  == 70):
+    for FC_layers in [4]:
+        for FC_dim in [20,40,50,60,70,80,90,100, 150,200,250]:
+            if FC_layers == 10 and FC_dim == 200:
                 config['FC_layers'] = FC_layers
                 config['FC_dim'] = FC_dim
                 model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FCD{FC_dim}FCL{FC_layers}",project="stobbe.julian/LW-AEpFC")
                 torch.manual_seed(config['seed'])
-                model = AE_FC_02.load_from_checkpoint(checkpoint_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-275/checkpoints/last.ckpt",config=config)
+                model = AE_FC_02.load_from_checkpoint(checkpoint_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-322/checkpoints/last.ckpt",config=config)
                 dataMod = DataMod_FC(config)
                 model_version["model/signature"].upload(config_path)
                 model_script = model.to_torchscript()
@@ -68,12 +70,12 @@ def main(args):
                 trainer = L.Trainer(enable_checkpointing=True, max_epochs=config["epochs"],
                                 callbacks=callbacks, logger=neptune_logger, gradient_clip_val=0.5) #precision="16-mixed", 
                 #['cudagraphs', 'inductor', 'onnxrt', 'openxla', 'tvm']
-                torch.compile(model, fullgraph=True, mode="max-autotune", backend='cudagraphs')
-                trainer.fit(model, datamodule=dataMod, ckpt_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-275/checkpoints/last.ckpt",)
+                model = torch.compile(model, mode="max-autotune")
+                trainer.fit(model, datamodule=dataMod, ckpt_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-322/checkpoints/last.ckpt",)
                 model_version["run/id"] = neptune_logger._run_instance["sys/id"].fetch()
                 neptune_logger.log_model_summary(model=model, max_depth=-1)
                 neptune_logger._run_instance.stop()
-            if ((FC_layers == 10 and FC_dim > 70)):
+            if not (FC_layers == 10 and FC_dim == 100) and not (FC_layers == 10 and FC_dim == 150) and not (FC_layers == 10 and FC_dim == 200):
                 config['FC_layers'] = FC_layers
                 config['FC_dim'] = FC_dim
                 model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FCD{FC_dim}FCL{FC_layers}",project="stobbe.julian/LW-AEpFC")
@@ -108,7 +110,7 @@ def main(args):
                 callbacks = [lr_monitor, early_stopping, val_ckeckpoint, swa, accumulator]
                 trainer = L.Trainer(enable_checkpointing=True, max_epochs=config["epochs"],
                                 callbacks=callbacks, logger=neptune_logger, gradient_clip_val=0.5) #precision="16-mixed", 
-                torch.compile(model, fullgraph=True, mode="max-autotune", backend='cudagraphs')
+                #model.model = torch.compile(model.model, mode="max-autotune")
                 trainer.fit(model, datamodule=dataMod)
                 model_version["run/id"] = neptune_logger._run_instance["sys/id"].fetch()
                 neptune_logger.log_model_summary(model=model, max_depth=-1)
