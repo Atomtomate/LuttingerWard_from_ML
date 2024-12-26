@@ -4,6 +4,7 @@ __pycache__
 *.pdf
 *.csv
 *.pt
+*.ckpt
 slurm
 .neptune
 events.*

@@ -4,9 +4,9 @@ import h5py
 import copy
 import numpy as np
 
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, get_worker_info
 
-#TODO relative import does not work...
+
 def dtype_str_to_type(dtype_str: str):
     if dtype_str.lower() == "float32":
         return torch.float32
@@ -17,35 +17,60 @@ def dtype_str_to_type(dtype_str: str):
 
 class AE_Dataset(Dataset):
     """
-    Placeholder for now. 
-    We may need this for large datasets or custom transformations/loss functions.
+    AE Dataset
     """
-    def __init__(self, x: torch.Tensor, y: torch.Tensor, dtype_default) -> None:
-        self.x = x.clone().detach().to(dtype=dtype_default)
-        self.y = y.clone().detach().to(dtype=dtype_default)
-        self.ylen = y.shape[1] // 2
-
+    def __init__(self, data_path, mode, dtype_default) -> None:
+        super().__init__()
+        self.data_path = data_path
+        self.mode = mode
+        self.dtype = dtype_default
+        with h5py.File(self.data_path, "r") as hf:
+            if self.mode == 'gf':
+                x = hf["GImp"][:]
+            elif self.mode == 'se':
+                x = hf["SImp"][:]
+            else:
+                raise RuntimeError("mode " + self.mode + "not found")
+        x = np.concatenate((x.real, x.imag), axis=1)
+        self.x = torch.tensor(x, dtype=self.dtype)
+        self.len = x.shape[0]
     def __len__(self) -> int:
-        return len(self.x)
-
-    def normalize_x(self, x: torch.Tensor) -> torch.Tensor:
-        return x
-
-    def unnormalize_x(self, x: torch.Tensor) -> torch.Tensor:
-        return x
-
-    def normalize_y(self, x: torch.Tensor) -> torch.Tensor:
-        return x
-
-    def unnormalize_y(self, x: torch.Tensor) -> torch.Tensor:
-        return x
+        return self.len
 
     def __getitem__(self, idx: int) -> tuple:
-        x_norm = self.normalize_x(self.x[idx,:])
-        y_norm = self.normalize_y(self.y[idx,:])
-        return x_norm, y_norm
+        x_norm = self.x[idx,:]
+        return x_norm
     
+class AE_DatasetFile(Dataset):
+    """
+    AE Dataset
+    """
+    def __init__(self, data_path, mode, dtype_default, transform=None) -> None:
+        super().__init__()
+        self.data_path = data_path
+        self.mode = mode
+        self.dtype = dtype_default
+        self.fh = None
+        if self.mode == 'gf':
+            self.key = "GImp"
+        elif self.mode == 'se':
+            self.key = "SImp"
+        with h5py.File(self.data_path, 'r') as fh:
+            self.len = fh["GImp"][:].shape[0]
 
+    def __del__(self):
+        if not (self.fh is None):
+            self.fh.close()
+        
+    def __len__(self) -> int:
+        return self.len
+
+    def __getitem__(self, idx: int) -> tuple:
+        if self.fh is None:
+            self.fh = h5py.File(self.data_path, 'r')
+        data = self.fh[self.key][idx]
+        return data
+    
 class DataMod_AE(L.LightningDataModule):
     def __init__(self, config):
         super().__init__()
@@ -54,7 +79,8 @@ class DataMod_AE(L.LightningDataModule):
         self.train_batch_size = config['batch_size']
         self.val_batch_size = config['batch_size']
         self.test_batch_size = config['batch_size']
-        self.data = config['PATH_TRAIN']
+        self.data_path = config['PATH_TRAIN']
+        self.num_workers = config['num_workers'] if ('num_workers' in config) else 8
         self.dtype = dtype_str_to_type(config['dtype'])
         self.mode = config['mode']
 
@@ -62,48 +88,10 @@ class DataMod_AE(L.LightningDataModule):
         """
         Download and transform datasets. 
         """
-        if isinstance(self.data, list):
-            x = None
-            y = None
-            for file in self.data:
-                with h5py.File(file, "r") as hf:
-                    if self.mode == 'gf':
-                        xi = hf["Set1/GImp"][:]
-                    elif self.mode == 'se':
-                        xi = hf["Set1/SImp"][:]
-                    else:
-                        raise RuntimeError("mode " + self.mode + "not found")
-                xi = np.concatenate((xi.real, xi.imag), axis=1)
-                yi = copy.deepcopy(xi)
-                p = np.random.RandomState(seed=0).permutation(xi.shape[0])
-                xi = xi[p,:]
-                yi = yi[p,:]
-                if x is None:
-                    x = xi
-                    y = yi
-                else:
-                    x = np.concatenate((x, xi), axis=0)
-                    y = np.concatenate((y, yi), axis=0)
-            x = torch.tensor(x, dtype=self.dtype)
-            y = torch.tensor(y, dtype=self.dtype)
+        if isinstance(self.data_path, list):
+            print("ERROR CONCAT TDATASET NOT IMPLEMENTED")
         else:
-            with h5py.File(self.data, "r") as hf:
-                if self.mode == 'gf':
-                    x = hf["Set1/GImp"][:]
-                elif self.mode == 'se':
-                    x = hf["Set1/SImp"][:]
-                else:
-                    raise RuntimeError("mode " + self.mode + "not found")
-                #y = hf["Set1/GImp"][:]
-            x = np.concatenate((x.real, x.imag), axis=1)
-            y = copy.deepcopy(x)
-            p = np.random.RandomState(seed=0).permutation(x.shape[0])
-            x = x[p,:]
-            y = y[p,:]
-            x = torch.tensor(x, dtype=self.dtype)
-            y = torch.tensor(y, dtype=self.dtype)
-
-        self.train_dataset = AE_Dataset(x, y, self.dtype)
+            self.train_dataset = AE_DatasetFile(self.data_path, self.mode, self.dtype)
         self.train_set_size = int(len(self.train_dataset) * 0.8)
         self.val_set_size = len(self.train_dataset) - self.train_set_size
 
@@ -111,10 +99,10 @@ class DataMod_AE(L.LightningDataModule):
         
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.train_batch_size, num_workers=8, pin_memory=True, persistent_workers=True, shuffle=True)
+        return DataLoader(self.train_dataset, batch_size=self.train_batch_size, num_workers=self.num_workers, pin_memory=True, persistent_workers=True, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.train_batch_size, num_workers=8, pin_memory=True, persistent_workers=True, shuffle=False)
+        return DataLoader(self.val_dataset, batch_size=self.train_batch_size, num_workers=self.num_workers, pin_memory=True, persistent_workers=True, shuffle=False)
     
     def test_dataloader(self):
         raise NotImplementedError("Define standard for data generation from jED.jl and create test data there!")

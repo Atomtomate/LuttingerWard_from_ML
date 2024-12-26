@@ -2,12 +2,12 @@
     
         "MODEL_NAME": "auto_encoder",
         "MODEL_WRAPER": "model_wraper_ae",
-        "PATH_TRAIN": ["D:/data_batch1_nPrune.hdf5","D:/data_batch1_nPrune.hdf5"],
+        "PATH_TRAIN": "D:/data_batch2_nPrune_proc.hdf5",
         "DATA_LOADER": "Dataset_ae_split",
         "dtype": "float64",
         "seed": 12345,
 
-        "mode": "se",
+        "mode": "gf",
 
         "optimizer": "Adam",
         "batch_size": 64,
@@ -32,6 +32,7 @@
         "n_layers": 1,
 
         "device_type": "gpu",
+        "num_workers": 2,
         "devices": 1,
         "num_nodes": 1
     

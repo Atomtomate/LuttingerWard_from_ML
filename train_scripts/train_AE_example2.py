@@ -25,12 +25,12 @@ torch.set_default_dtype(torch.float64)
 
 
 def main(args):
-    config = json.load(open(join(dirname(__file__),'../configs/confmod_AE_GF_tmp.json')))
+    config = json.load(open(join(dirname(__file__),'../configs/confmod_AE_SE_tmp.json')))
     torch.manual_seed(config['seed'])
     model = AutoEncoder_01(config) 
     dataMod = DataMod_AE(config)
     val_ckeckpoint = ModelCheckpoint(
-        filename="{epoch}-{step}-{val_loss:.8f}",
+        filename="SE{epoch}-{step}-{val_loss:.8f}",
         monitor="val/loss",
         mode="min",
         save_top_k=2,
