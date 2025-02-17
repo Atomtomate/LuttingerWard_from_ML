@@ -2,16 +2,18 @@
     
         "MODEL_NAME": "AE_FC_FCDimScale_with_dens",
         "MODEL_WRAPER": "model_wraper_ae",
-        "PATH_TRAIN": "D:/data_batch2_nPrune.hdf5",
-        "GF_AE_path": "G:/Codes/LuttingerWard_from_ML/.neptune/auto_encoder/LWAEP-121/checkpoints/last.ckpt",
-        "SE_AE_path": "G:/Codes/LuttingerWard_from_ML/.neptune/auto_encoder/LWAEP-139/checkpoints/last.ckpt",
+        "PATH_TRAIN": ["C:/batch_NB4_nPrune_noisy_pre.hdf5","D:/batch_NB3_nPrune_noisy_pre.hdf5","C:/batch_NB2_nPrune_noisy_pre.hdf5"],
+        "preproc_data": true,
+        "GF_AE_path": "G:/Codes/LuttingerWard_from_ML/.neptune/auto_encoder/LWAEP-420/checkpoints/last.ckpt",
+        "SE_AE_path": "G:/Codes/LuttingerWard_from_ML/.neptune/auto_encoder/LWAEP-422/checkpoints/last.ckpt",
+        "AE_Version": 2,
         "dtype": "float64",
         "seed": 12345,
 
 
         "optimizer": "Adam",
         "batch_size": 64,
-        "val_batch_size": 512,
+        "val_batch_size": 4096,
         "train_val_split": 0.8,
 
         "learning_rate": 0.001,

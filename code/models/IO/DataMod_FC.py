@@ -22,8 +22,8 @@ class FC_Dataset(Dataset):
     """
     def __init__(self, x: torch.Tensor, y: torch.Tensor, dtype_default) -> None:
         super().__init__()
-        self.x = x.clone().detach().to(dtype=dtype_default)
-        self.y = y.clone().detach().to(dtype=dtype_default)
+        self.x = x
+        self.y = y
         self.ylen = y.shape[1] // 2
         
 
@@ -61,7 +61,28 @@ class FC_File_Dataset(Dataset):
     def __getitem__(self, idx: int) -> tuple:
         return self.x[idx,:], self.y[idx,:]
     
+    
+class FC_H5File_Dataset(Dataset):
+    def __init__(self, fp, dtype_default) -> None:
+        super().__init__()
+        self.fp = fp
+        self.fh = None
+        with h5py.File(self.fp, "r") as hf:
+            self.len = hf["data"][:].shape[0]
+        self.dtype_default = dtype_default
 
+    def __len__(self) -> int:
+        return self.len
+
+    def __getitem__(self, idx: int) -> tuple:
+        if self.fh is None:
+            self.fh = h5py.File(self.fp, "r")
+        return self.fh["data"][idx,:], self.fh["labels"][idx,:]
+    
+    def __del__(self):
+        if self.fh is not None:
+            self.fh.close()
+    
 class DataMod_FC(L.LightningDataModule):
     def __init__(self, config):
         super().__init__()
@@ -80,6 +101,7 @@ class DataMod_FC(L.LightningDataModule):
         self.mmap_y_size = config['mmap_y_size'] if ('mmap_y_size' in config) else 0
         self.num_workers = config['num_workers'] if ('num_workers' in config) else 8
         self.persistent_workers = config['persistent_workers'] if ('persistent_workers' in config) else True
+        self.generator1 = torch.Generator().manual_seed(0)
 
     def setup(self, stage: str):
         """
@@ -95,9 +117,6 @@ class DataMod_FC(L.LightningDataModule):
                     with h5py.File(file, "r") as hf:
                         xi = hf["data"][:]
                         yi = hf["labels"][:]
-                        p = np.random.RandomState(seed=0).permutation(xi.shape[0])
-                        xi = xi[p,:]
-                        yi = yi[p,:]
                         if x is None:
                             x = xi
                             y = yi
@@ -114,9 +133,6 @@ class DataMod_FC(L.LightningDataModule):
                         beta = hf['Set1/Parameters'][:][:,-1]
                     xi = np.concatenate((xi.real, xi.imag), axis=1)
                     yi = np.concatenate((yi.real, yi.imag), axis=1)
-                    p = np.random.RandomState(seed=0).permutation(xi.shape[0])
-                    xi = xi[p,:]
-                    yi = yi[p,:]
                     xi = np.c_[ndens, beta, xi]
                     if x is None:
                         x = xi
@@ -131,40 +147,60 @@ class DataMod_FC(L.LightningDataModule):
             len_t = len(ds)
             self.train_set_size = int(len_t * self.train_val_split)
             self.val_set_size = len_t - self.train_set_size
-            self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size])
-
+            self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size], generator=self.generator1)
         else:
-            if not self.mmap_x:
-                if self.preprocessed_data:
-                    with h5py.File(self.data, "r") as hf:
-                        x = torch.tensor(hf["data"][:], dtype=self.dtype)
-                        y = torch.tensor(hf["labels"][:], dtype=self.dtype)
-                else:
-                    with h5py.File(self.data, "r") as hf:
-                        x = hf["Set1/GImp"][:]
-                        y = hf["Set1/SImp"][:]
-                        ndens = hf["Set1/dens"][:]
-                        beta = hf['Set1/Parameters'][:][:,-1]
-                    x = np.concatenate((x.real, x.imag), axis=1)
-                    y = np.concatenate((y.real, y.imag), axis=1)
-                    p = np.random.RandomState(seed=0).permutation(x.shape[0])
-                    x = x[p,:]
-                    y = y[p,:]
-                    x = np.c_[ndens, beta, x]
-                    x = torch.tensor(x, dtype=self.dtype)
-                    y = torch.tensor(y, dtype=self.dtype)
+            print("in else")
+            if self.preprocessed_data:
+                print("in preproc")
 
-            if not self.mmap_x:
+                if isinstance(self.data, list):
+                    print("in list")
+                    train_ds_list = []
+                    val_ds_list = []
+                    for file in self.data:
+                        ds = FC_H5File_Dataset(file, self.mode, self.dtype)
+                        self.train_dataset = ds
+                        self.train_set_size = int(len(ds) * 0.8)
+                        self.val_set_size = len(ds) - self.train_set_size
+                        train_ds, val_ds = random_split(self.train_dataset, [self.train_set_size, self.val_set_size], generator=self.generator1)
+                        train_ds_list.append(train_ds)
+                        val_ds_list.append(val_ds)
+                    self.train_dataset = ConcatDataset(train_ds_list)
+                    self.val_dataset = ConcatDataset(val_ds_list)
+                    print("len ", len(self.train_dataset))
+                else:
+                    print("in list else")
+                    ds = FC_H5File_Dataset(file, self.dtype)
+                    if stage != 'test':
+                        self.train_set_size = int(len(ds) * 0.8)
+                        self.val_set_size = len(ds) - self.train_set_size
+                        self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size], generator=self.generator1)
+                    else:
+                        self.test_dataset = ds
+            else:
+                print("in preproc else")
+                with h5py.File(self.data, "r") as hf:
+                    x = hf["Set1/GImp"][:]
+                    y = hf["Set1/SImp"][:]
+                    ndens = hf["Set1/dens"][:]
+                    beta = hf['Set1/Parameters'][:][:,-1]
+                x = np.concatenate((x.real, x.imag), axis=1, dtype=self.dtype)
+                y = np.concatenate((y.real, y.imag), axis=1, dtype=self.dtype)
+                #p = np.random.RandomState(seed=0).permutation(x.shape[0])
+                #x = x[p,:]
+                #y = y[p,:]
+                x = np.c_[ndens, beta, x]
+                x = torch.tensor(x, dtype=self.dtype)
+                y = torch.tensor(y, dtype=self.dtype)
+
                 ds = FC_Dataset(x, y, self.dtype)
                 len_t = len(ds)
                 if stage != 'test':
                     self.train_set_size = int(len_t * self.train_val_split)
                     self.val_set_size = len_t - self.train_set_size
-                    self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size])
+                    self.train_dataset, self.val_dataset = random_split(ds, [self.train_set_size, self.val_set_size], generator=self.generator1)
                 else:
                     self.test_dataset = ds
-            else:
-                self.test_dataset = FC_File_Dataset(self.mmap_x, self.mmap_y, self.mmap_x_size, self.mmap_y_size, self.dtype)
         
 
     def train_dataloader(self):
@@ -174,4 +210,4 @@ class DataMod_FC(L.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.val_batch_size, num_workers=self.num_workers, pin_memory=True, persistent_workers=self.persistent_workers, shuffle=False)
     
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.val_batch_size, num_workers=self.num_workers, persistent_workers=self.persistent_workers, shuffle=False)
+        return DataLoader(self.test_dataset, batch_size=self.test_batch_size, num_workers=self.num_workers, persistent_workers=self.persistent_workers,  pin_memory=True, shuffle=False)

@@ -2,15 +2,15 @@
     
         "MODEL_NAME": "auto_encoder",
         "MODEL_WRAPER": "model_wraper_ae",
-        "PATH_TRAIN": ["C:/batch_NB4_nPrune_noisy_pre.hdf5","D:/batch_NB3_nPrune_noisy_pre.hdf5","C:/batch_NB2_nPrune_noisy_pre.hdf5"],
+        "PATH_TRAIN": ["C:/batch_NB4_nPrune_noisy_pre.hdf5","C:/batch_NB2_nPrune_noisy_pre.hdf5"],
         "DATA_LOADER": "Dataset_ae_split",
         "dtype": "float64",
         "seed": 12345,
 
-        "mode": "gf",
+        "mode": "se",
 
         "optimizer": "Adam",
-        "batch_size": 32,
+        "batch_size": 64,
         "val_batch_size": 512,
         "learning_rate": 1e-3,
         "weight_decay": 0.0,

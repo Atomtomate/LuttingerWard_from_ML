@@ -4,7 +4,7 @@ from os.path import dirname, abspath, join
 
 #TODO I hate the python import system. someone else fix this please.
 sys.path.append(join(dirname(__file__),'../code/models'))
-from model_AE import AutoEncoder_01
+from model_AE import AutoEncoder_02
 sys.path.append(join(dirname(__file__),'../code/models/IO'))
 from DataMod_AE import *
 
@@ -24,12 +24,12 @@ torch.set_default_dtype(torch.float64)
 
 
 def main(args):
-    config = json.load(open(join(dirname(__file__),'../configs/confmod_AE_GE_tmp.json')))
+    config = json.load(open(join(dirname(__file__),'../configs/confmod_AE_SE2.json')))
     torch.manual_seed(config['seed'])
-    model = AutoEncoder_01(config) 
-    dataMod = DataMod_AE(config)
+    model = AutoEncoder_02(config) 
+    dataMod = DataMod_AE_2(config)
 
-    trainer = L.Trainer(enable_checkpointing=False, max_epochs=config["epochs"],accelerator="cpu",
+    trainer = L.Trainer(enable_checkpointing=False, max_epochs=config["epochs"],accelerator="cpu",fast_dev_run=True,
                       logger=False, gradient_clip_val=0.5) #precision="16-mixed", 
 
     trainer.fit(model, datamodule=dataMod)                

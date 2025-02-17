@@ -20,6 +20,7 @@ import json
 
 torch.set_float32_matmul_precision("high")
 torch.set_default_dtype(torch.float64)
+torch.backends.cudnn.benchmark = True
 
 def main(args):
     pr = neptune.init_project("LW-AEpFC")
@@ -29,90 +30,91 @@ def main(args):
     model_key = "AEFCNL"
     if not any(models_table["sys/id"].str.contains("LWAEP-"+model_key)):
         modelN = neptune.init_model(key=model_key,name=config['MODEL_NAME'],project="stobbe.julian/LW-AEpFC")
-    for FC_layers in [5,6]:
-        for FC_dim in [100,150,200]:
-            if False and FC_layers == 5 and FC_dim == 100:
-                config['FC_layers'] = FC_layers
-                config['FC_dim'] = FC_dim
-                model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FCD{FC_dim}FCL{FC_layers}",project="stobbe.julian/LW-AEpFC")
-                torch.manual_seed(config['seed'])
-                model = AE_FC_02.load_from_checkpoint(checkpoint_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-319/checkpoints/last.ckpt",config=config)
-                dataMod = DataMod_FC(config)
-                model_version["model/signature"].upload(config_path)
-                model_script = model.to_torchscript()
-                torch.jit.save(model_script, "tmp_model.pt")
-                model_version["model/definition"].upload("tmp_model.pt")
+    run_list = [(7,150)]
+    for el in run_list:
+        FC_layers, FC_dim = el
+        if FC_layers == 7 and FC_dim == 150:
+            config['FC_layers'] = FC_layers
+            config['FC_dim'] = FC_dim
+            model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FCD{FC_dim}FCL{FC_layers}",project="stobbe.julian/LW-AEpFC")
+            torch.manual_seed(config['seed'])
+            model = AE_FC_02.load_from_checkpoint(checkpoint_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-397/checkpoints/last.ckpt",config=config)
+            dataMod = DataMod_FC(config)
+            model_version["model/signature"].upload(config_path)
+            model_script = model.to_torchscript()
+            torch.jit.save(model_script, "tmp_model.pt")
+            model_version["model/definition"].upload("tmp_model.pt")
 
-                lr_monitor = LearningRateMonitor(logging_interval='step')
-                neptune_logger = NeptuneLogger(    
-                                    project="stobbe.julian/LW-AEpFC",
-                                    name=config['MODEL_NAME'],
-                                    description="Pretrained Autoencoder with fully connected feed forward for Luttinger Ward functional. NO additonal input like electron density.",
-                                    tags=["AE", "FC"],
-                                    capture_hardware_metrics=False,
-                                    capture_stdout=False,
-                                    )
-                
-                val_ckeckpoint = ModelCheckpoint( # saved in `trainer.default_root_dir`/`logger.version`/`checkpoint_callback.dirpath`
-                        filename="{epoch}-{step}-{val_loss:.8f}",
-                        monitor="val/loss",
-                        mode="min",
-                        save_top_k=2,
-                        save_last =True
-                        )
-                early_stopping = EarlyStopping(monitor="val/loss",patience=20, stopping_threshold=5e-10, min_delta=1e-11)
-                swa = StochasticWeightAveraging(swa_lrs=1e-8,annealing_epochs=40, swa_epoch_start=220)
-                accumulator = GradientAccumulationScheduler(scheduling={0: 512, 12: 128, 24: 64, 32: 32, 44: 16, 56: 8, 68: 4, 80: 1})
-                callbacks = [lr_monitor, early_stopping, val_ckeckpoint, swa, accumulator]
-                trainer = L.Trainer(enable_checkpointing=True, max_epochs=config["epochs"], accelerator="cpu",
-                                callbacks=callbacks, logger=neptune_logger, gradient_clip_val=0.5) #precision="16-mixed", 
-                #['cudagraphs', 'inductor', 'onnxrt', 'openxla', 'tvm']
-                torch.compile(model, fullgraph=True, mode="max-autotune", backend='cudagraphs')
-                trainer.fit(model, datamodule=dataMod, ckpt_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-319/checkpoints/last.ckpt",)
-                model_version["run/id"] = neptune_logger._run_instance["sys/id"].fetch()
-                #model = torch.compile(model, fullgraph=True, mode="max-autotune")
-                neptune_logger.log_model_summary(model=model, max_depth=-1)
-                neptune_logger._run_instance.stop()
-            if not (FC_layers == 3 and FC_dim == 80) and  not (FC_layers == 3 and FC_dim == 90) and not (FC_layers == 3 and FC_dim == 100) and not (FC_layers == 5 and FC_dim == 80) and not (FC_layers == 5 and FC_dim == 90):
-                config['FC_layers'] = FC_layers
-                config['FC_dim'] = FC_dim
-                model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FCD{FC_dim}FCL{FC_layers}",project="stobbe.julian/LW-AEpFC")
-                torch.manual_seed(config['seed'])
-                model = AE_FC_02(config,dbg_print = True) 
-                dataMod = DataMod_FC(config)
-                model_version["model/signature"].upload(config_path)
-                model_script = model.to_torchscript()
-                torch.jit.save(model_script, "tmp_model.pt")
-                model_version["model/definition"].upload("tmp_model.pt")
+            lr_monitor = LearningRateMonitor(logging_interval='step')
+            neptune_logger = NeptuneLogger(    
+                                project="stobbe.julian/LW-AEpFC",
+                                name=config['MODEL_NAME'],
+                                description="Pretrained Autoencoder with fully connected feed forward for Luttinger Ward functional. NO additonal input like electron density.",
+                                tags=["AE", "FC"],
+                                capture_hardware_metrics=False,
+                                capture_stdout=False,
+                                )
+            
+            val_ckeckpoint = ModelCheckpoint( # saved in `trainer.default_root_dir`/`logger.version`/`checkpoint_callback.dirpath`
+                    filename="{epoch}-{step}-{val_loss:.8f}",
+                    monitor="val/loss",
+                    mode="min",
+                    save_top_k=2,
+                    save_last =True
+                    )
+            early_stopping = EarlyStopping(monitor="val/loss",patience=20, stopping_threshold=5e-10, min_delta=1e-11)
+            swa = StochasticWeightAveraging(swa_lrs=1e-8,annealing_epochs=40, swa_epoch_start=220)
+            accumulator = GradientAccumulationScheduler(scheduling={0: 512, 12: 128, 24: 64, 32: 32, 44: 16, 56: 8, 68: 4, 80: 1})
+            callbacks = [lr_monitor, early_stopping, val_ckeckpoint, swa, accumulator]
+            trainer = L.Trainer(enable_checkpointing=True, max_epochs=config["epochs"], accelerator="cpu",
+                            callbacks=callbacks, logger=neptune_logger, gradient_clip_val=0.5) #precision="16-mixed", 
+            #['cudagraphs', 'inductor', 'onnxrt', 'openxla', 'tvm']
+            torch.compile(model, fullgraph=True, mode="max-autotune", backend='cudagraphs')
+            trainer.fit(model, datamodule=dataMod, ckpt_path="G:/Codes/LuttingerWard_from_ML/.neptune/AE_FC_FCDimScale_with_dens/LWAEP-397/checkpoints/last.ckpt",)
+            model_version["run/id"] = neptune_logger._run_instance["sys/id"].fetch()
+            #model = torch.compile(model, fullgraph=True, mode="max-autotune")
+            neptune_logger.log_model_summary(model=model, max_depth=-1)
+            neptune_logger._run_instance.stop()
+        else:
+            config['FC_layers'] = FC_layers
+            config['FC_dim'] = FC_dim
+            model_version = neptune.init_model_version(model=f"LWAEP-"+model_key,name=f"L{14}FCD{FC_dim}FCL{FC_layers}",project="stobbe.julian/LW-AEpFC")
+            torch.manual_seed(config['seed'])
+            model = AE_FC_02(config,dbg_print = True) 
+            dataMod = DataMod_FC(config)
+            model_version["model/signature"].upload(config_path)
+            model_script = model.to_torchscript()
+            torch.jit.save(model_script, "tmp_model.pt")
+            model_version["model/definition"].upload("tmp_model.pt")
 
-                lr_monitor = LearningRateMonitor(logging_interval='step')
-                neptune_logger = NeptuneLogger(    
-                                    project="stobbe.julian/LW-AEpFC",
-                                    name=config['MODEL_NAME'],
-                                    description="Pretrained Autoencoder with fully connected feed forward for Luttinger Ward functional. NO additonal input like electron density.",
-                                    tags=["AE", "FC"],
-                                    capture_hardware_metrics=False,
-                                    capture_stdout=False,
-                                    )
-                
-                val_ckeckpoint = ModelCheckpoint( # saved in `trainer.default_root_dir`/`logger.version`/`checkpoint_callback.dirpath`
-                        filename="{epoch}-{step}-{val_loss:.8f}",
-                        monitor="val/loss",
-                        mode="min",
-                        save_top_k=2,
-                        save_last =True
-                        )
-                early_stopping = EarlyStopping(monitor="val/loss",patience=20, stopping_threshold=5e-10, min_delta=1e-11)
-                swa = StochasticWeightAveraging(swa_lrs=1e-8,annealing_epochs=40, swa_epoch_start=220)
-                accumulator = GradientAccumulationScheduler(scheduling={0: 512, 12: 128, 24: 64, 32: 32, 44: 16, 56: 8, 68: 4, 80: 1})
-                callbacks = [lr_monitor, early_stopping, val_ckeckpoint, swa, accumulator]
-                trainer = L.Trainer(enable_checkpointing=True, max_epochs=config["epochs"], accelerator="cpu",
-                                callbacks=callbacks, logger=neptune_logger, gradient_clip_val=0.5) #precision="16-mixed", 
-                #model = torch.compile(model, fullgraph=True, mode="max-autotune")
-                trainer.fit(model, datamodule=dataMod)
-                model_version["run/id"] = neptune_logger._run_instance["sys/id"].fetch()
-                neptune_logger.log_model_summary(model=model, max_depth=-1)
-                neptune_logger._run_instance.stop()
+            lr_monitor = LearningRateMonitor(logging_interval='step')
+            neptune_logger = NeptuneLogger(    
+                                project="stobbe.julian/LW-AEpFC",
+                                name=config['MODEL_NAME'],
+                                description="Pretrained Autoencoder with fully connected feed forward for Luttinger Ward functional. NO additonal input like electron density.",
+                                tags=["AE", "FC"],
+                                capture_hardware_metrics=False,
+                                capture_stdout=False,
+                                )
+            
+            val_ckeckpoint = ModelCheckpoint( # saved in `trainer.default_root_dir`/`logger.version`/`checkpoint_callback.dirpath`
+                    filename="{epoch}-{step}-{val_loss:.8f}",
+                    monitor="val/loss",
+                    mode="min",
+                    save_top_k=2,
+                    save_last =True
+                    )
+            early_stopping = EarlyStopping(monitor="val/loss",patience=20, stopping_threshold=5e-10, min_delta=1e-11)
+            swa = StochasticWeightAveraging(swa_lrs=1e-8,annealing_epochs=40, swa_epoch_start=220)
+            accumulator = GradientAccumulationScheduler(scheduling={0: 512, 12: 128, 24: 64, 32: 32, 44: 16, 56: 8, 68: 4, 80: 1})
+            callbacks = [lr_monitor, early_stopping, val_ckeckpoint, swa, accumulator]
+            trainer = L.Trainer(enable_checkpointing=True, max_epochs=config["epochs"], accelerator="cpu",
+                            callbacks=callbacks, logger=neptune_logger, gradient_clip_val=0.5) #precision="16-mixed", 
+            #model = torch.compile(model, fullgraph=True, mode="max-autotune")
+            trainer.fit(model, datamodule=dataMod)
+            model_version["run/id"] = neptune_logger._run_instance["sys/id"].fetch()
+            neptune_logger.log_model_summary(model=model, max_depth=-1)
+            neptune_logger._run_instance.stop()
 
 
 if __name__ == '__main__':
