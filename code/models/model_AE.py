@@ -92,16 +92,14 @@ class AutoEncoder_01(L.LightningModule):
         return x
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        x, y = batch
-        pred = self.forward(x)
-        loss = self.loss(pred, x)
+        pred = self.forward(batch)
+        loss = self.loss(pred, batch)
         self.log("train/loss", loss, prog_bar=False)
         return loss
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        x, y = batch
-        pred = self.forward(x)
-        loss = self.loss(pred, x)
+        pred = self.forward(batch)
+        loss = self.loss(pred, batch)
         self.log("val/loss", loss, prog_bar=True)
         return loss
 

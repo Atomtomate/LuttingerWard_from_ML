@@ -4,7 +4,6 @@ import pytorch_lightning as L
 import numpy as np
 from utils.LossFunctions import *
 from utils.misc import *
-import matplotlib.pyplot as plt
 from model_AE import AutoEncoder_01, AutoEncoder_02
 import json
 
@@ -87,6 +86,9 @@ class AE_FC_02(L.LightningModule):
             self.SE_encoder = AutoEncoder_01.load_from_checkpoint(self.hparams['SE_AE_path'], config=tmp_cfg)
         self.SE_encoder.eval()
         self.SE_encoder.freeze()
+
+        self.batch_size = 0
+        self.fc_buffer = None
 
         if dbg_print:
             print("FC:")
@@ -185,16 +187,19 @@ class AE_FC_03(L.LightningModule):
         self.lr = self.hparams['lr']
         if dbg_print:
             print("G:")
-        tmp_cfg = json.load(open("G:/Codes/LuttingerWard_from_ML/configs/confmod_AE_GF_tmp.json"))
+        tmp_cfg = json.load(open("G:/Codes/LuttingerWard_from_ML/configs/confmod_AE_GE_tmp.json"))
         self.GF_encoder = AutoEncoder_01.load_from_checkpoint(self.hparams['GF_AE_path'], config=tmp_cfg)
         self.GF_encoder.eval()
         self.GF_encoder.freeze()
         if dbg_print:
             print("SE:")
-        tmp_cfg = json.load(open("G:/Codes/LuttingerWard_from_ML/configs/confmod_AE_SE_tmp.json"))
+        tmp_cfg = json.load(open(config['SE_AE_conf_path']))
         self.SE_encoder = AutoEncoder_01.load_from_checkpoint(self.hparams['SE_AE_path'], config=tmp_cfg)
         self.SE_encoder.eval()
         self.SE_encoder.freeze()
+
+        self.batch_size = 0
+        self.fc_buffer = None
 
         if dbg_print:
             print("FC:")
@@ -224,13 +229,18 @@ class AE_FC_03(L.LightningModule):
     
     def forward(self, GF, ndens):
         G_latent = self.GF_encoder.encoder(GF)
-        SE_latent = self.GF_to_SE(torch.cat((G_latent,ndens), dim=1))
+        si = G_latent.size(0)
+        if si != self.batch_size:
+            self.batch_size = si
+            self.fc_buffer = torch.empty(self.batch_size, self.hparams['latent_dim'] + 1, device=GF.device) 
+        self.fc_buffer[0:si,:-1] = G_latent
+        self.fc_buffer[0:si,-1] = ndens
+        SE_latent = self.GF_to_SE(self.fc_buffer)
         SE = self.SE_encoder.decoder(SE_latent)
         return SE
 
     def _shared_eval_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        x, SE_in = batch
-        ndens, beta, GF_in = torch.split(x, [1,1,x.size(1)-2], dim=1) 
+        GF_in, SE_in, ndens = batch
         SE_hat = self(GF_in, ndens)
         loss = self.reconstr_loss_f(SE_in, SE_hat)
         return loss
